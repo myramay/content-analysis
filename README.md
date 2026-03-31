@@ -1,4 +1,4 @@
-# ED / Skinnytok Content Detection — Portfolio Project
+# ED / Skinnytok Content Detection 
 
 A three-part system that detects eating-disorder-promoting content on the web: an ML training pipeline, a REST inference API, and a Chrome browser extension.
 
@@ -70,7 +70,7 @@ Health check: `GET http://localhost:8000/health`
 
 ---
 
-## 3. Load the Chrome Extension
+## 3. Load the Chrome Extension - NOT YET, security needs to be hardened (in progress)
 
 1. Open Chrome and go to `chrome://extensions/`
 2. Enable **Developer mode** (top-right toggle)
