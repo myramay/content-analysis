@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eating Disorder Content Detector</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #f5f5f5;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+    min-height: 100vh;
+  }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 560px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    height: fit-content;
+  }
+  h1 { font-size: 1.2rem; color: #222; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 0.85rem; color: #666; margin-bottom: 1.5rem; }
+
+  label { display: block; font-size: 0.85rem; font-weight: 600; color: #444; margin-bottom: 0.4rem; }
+
+  input[type="password"] {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="password"]:focus { border-color: #666; }
+
+  textarea {
+    width: 100%;
+    height: 140px;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+  textarea:focus { border-color: #666; }
+
+  button {
+    margin-top: 0.75rem;
+    width: 100%;
+    padding: 0.65rem;
+    background: #222;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover:not(:disabled) { background: #444; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+
+  .result {
+    margin-top: 1.25rem;
+    padding: 1rem 1.1rem;
+    border-radius: 8px;
+    display: none;
+    border-left: 4px solid;
+  }
+  .result.safe    { background: #f0faf0; border-color: #2e9e2e; }
+  .result.warn    { background: #fffbea; border-color: #d4a017; }
+  .result.harmful { background: #fff2f2; border-color: #d93025; }
+
+  .verdict {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3rem;
+  }
+  .safe    .verdict { color: #2e7d32; }
+  .warn    .verdict { color: #b45309; }
+  .harmful .verdict { color: #b71c1c; }
+
+  .reason { font-size: 0.875rem; color: #444; }
+
+  .error {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fff0f0;
+    border: 1px solid #f5c6c6;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #c0392b;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Eating Disorder Content Detector</h1>
+  <p class="subtitle">Flags content promoting restrictive eating, extreme thinness, or body dysmorphia.</p>
+
+  <label for="apiKey">Anthropic API Key</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
+
+  <label for="content">Content to analyze</label>
+  <textarea id="content" placeholder="Paste a caption, comment, or post here…"></textarea>
+
+  <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+
+  <div class="error" id="error"></div>
+
+  <div class="result" id="result">
+    <div class="verdict" id="verdict"></div>
+    <div class="reason" id="reason"></div>
+  </div>
+</div>
+
+<script>
+async function analyze() {
+  const apiKey  = document.getElementById('apiKey').value.trim();
+  const content = document.getElementById('content').value.trim();
+  const btn     = document.getElementById('analyzeBtn');
+  const errorEl = document.getElementById('error');
+  const resultEl = document.getElementById('result');
+
+  errorEl.style.display = 'none';
+  resultEl.style.display = 'none';
+
+  if (!apiKey) return showError('Enter your Anthropic API key.');
+  if (!content) return showError('Enter some content to analyze.');
+
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        system: 'You are a content safety classifier. Classify the input as SAFE, WARN, or HARMFUL based on whether it promotes eating disorders, extreme thinness, restrictive eating, or body dysmorphia. Reply in JSON only: {"verdict": "SAFE|WARN|HARMFUL", "reason": "one sentence"}',
+        messages: [{ role: 'user', content }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `API error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const raw  = data.content?.[0]?.text ?? '';
+    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+
+    const verdict = (json.verdict || '').toUpperCase();
+    if (!['SAFE', 'WARN', 'HARMFUL'].includes(verdict)) throw new Error('Unexpected verdict: ' + verdict);
+
+    resultEl.className = 'result ' + verdict.toLowerCase();
+    document.getElementById('verdict').textContent = verdict;
+    document.getElementById('reason').textContent  = json.reason || '';
+    resultEl.style.display = 'block';
+
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analyze';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+document.getElementById('content').addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') analyze();
+});
+</script>
+</body>
+</html>
